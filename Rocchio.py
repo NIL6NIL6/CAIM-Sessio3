@@ -11,7 +11,7 @@ Rocchio
 :Authors:
     Nil Vilas Basil
 
-:Version: 
+:Version:
 
 :Date:  17/10/2019
 """
@@ -26,8 +26,10 @@ from elasticsearch_dsl.query import Q
 import argparse
 import numpy as np
 from functools import reduce
+from collections import Counter
 
 __author__ = 'nil.vilas'
+
 
 def document_term_vector(client, index, id):
     """
@@ -52,6 +54,7 @@ def document_term_vector(client, index, id):
             file_df[t] = termvector['term_vectors']['text']['terms'][t]['doc_freq']
     return sorted(file_td.items()), sorted(file_df.items())
 
+
 def toTFIDF(client, index, file_id):
     """
     Returns the term weights of a document
@@ -68,13 +71,14 @@ def toTFIDF(client, index, file_id):
     dcount = doc_count(client, index)
 
     tfidfw = {}
-    for (t, w),(_, df) in zip(file_tv, file_df):
-        #Code filled
+    for (t, w), (_, df) in zip(file_tv, file_df):
+        # Code filled
         tfdi = w / max_freq
         idfi = np.log2(dcount / df)
         tfidfw[t] = tfdi * idfi
 
     return normalize(tfidfw)
+
 
 def normalize(tw):
     """
@@ -83,10 +87,11 @@ def normalize(tw):
     :param tw:
     :return:
     """
-    #Code filled
-        
+    # Code filled
+
     div = np.sqrt(reduce(lambda y, x: x**2 + y, tw.values(), 0))
     return dict(map(lambda x: (x[0], x[1]/div), tw.items()))
+
 
 def doc_count(client, index):
     """
@@ -98,6 +103,7 @@ def doc_count(client, index):
     """
     return int(CatClient(client).count(index=[index], format='json')[0]['count'])
 
+
 def parse_arguments():
     """
     Parses the input arguments
@@ -107,24 +113,44 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--index', default=None, help='Index to search')
-    parser.add_argument('--nrounds', default=2, help='Number of applications of Rocchios rule')
-    parser.add_argument('--topdocs', default=5, help='Number of top documents considered relevant and used for applying Rocchio at each round')
-    parser.add_argument('--newterms', default=5, help='Number of new terms to be kept in the new query')
-    parser.add_argument('--alpha', default=5, help='Weight of the old query in Rocchios rule')
-    parser.add_argument('--beta', default=3, help='Weight of the new terms in Rocchios rule')
-    parser.add_argument('--query', default=None, nargs=argparse.REMAINDER, help='List of words to search')
+    parser.add_argument('--nrounds', default=2,
+                        help='Number of applications of Rocchios rule')
+    parser.add_argument('--topdocs', default=5,
+                        help='Number of top documents considered relevant and used for applying Rocchio at each round')
+    parser.add_argument('--newterms', default=5,
+                        help='Number of new terms to be kept in the new query')
+    parser.add_argument('--alpha', default=5,
+                        help='Weight of the old query in Rocchios rule')
+    parser.add_argument('--beta', default=3,
+                        help='Weight of the new terms in Rocchios rule')
+    parser.add_argument('--query', default=None,
+                        nargs=argparse.REMAINDER, help='List of words to search')
 
     return parser.parse_args()
 
 
 def execute_query(query, k, s):
-    q = Q('query_string',query=query[0])
+    """
+    Executes a the 'query' on client 's0 and returns the
+    'k' most relevant results.
+
+    Arguments:
+        query {string} -- Query to be executed
+        k {[type]} -- Number of relevintant results to return
+        s {[type]} -- Search client
+
+    Returns:
+        responses of the k most relevant results (with the
+        document id)
+    """
+    q = Q('query_string', query=query[0])
     for i in range(1, len(query)):
-        q &= Q('query_string',query=query[i])
+        q &= Q('query_string', query=query[i])
 
     s = s.query(q)
     response = s[0:k].execute()
     return response
+
 
 def get_response_tfidf(client, index, response):
     tfidfs = [toTFIDF(client, index, r.meta.id) for r in response]
@@ -139,38 +165,59 @@ def get_response_tfidf(client, index, response):
     return res
 
 
-def get_terms(tfidf, R):
-    s = [(k, v) for k, v in sorted(d.items(), key=lambda x: x[1], reverse=True)]
-    return s[0:R]
+def get_terms(tfidf, R, kdocs, beta):
+    s = [(k, float(beta*v/kdocs))
+         for k, v in sorted(tfidf.items(), key=lambda x: x[1], reverse=True)]
+    return dict(s[0:R])
 
-def new_query(query, terms):
-    pass
 
-if __name__ == '__main__':	
+def new_query(query, terms, a):
+    q = {k: float(v*a) for k, v in query.items()}
+    cdict = Counter(q) + Counter(terms)
+    return dict(cdict)
+
+
+def parse_query(q):
+    query = {}
+    for t in q:
+        q_term = t.split('^')
+        if(len(q_term) > 1):
+            query[q_term[0]] = float(q_term[1])
+        else:
+            query[q_term[0]] = float(1)
+    return query
+
+
+def stringify_query(q):
+    query = []
+    for key in q:
+        query.append(key + '^' + str(q[key]))
+    print(query)
+    return query
+
+
+if __name__ == '__main__':
     args = parse_arguments()
 
     index = args.index
-    query = args.query
-    nrounds = args.nrounds
-    k = args.topdocs
-    R = args.newterms
-    a = args.alpha
-    b = args.beta
-    
+    query = parse_query(args.query)
+    nrounds = int(args.nrounds)
+    k = int(args.topdocs)
+    R = int(args.newterms)
+    a = float(args.alpha)
+    b = float(args.beta)
+
     try:
         client = Elasticsearch()
         s = Search(using=client, index=index)
-
         if query is not None:
             print(f'Using Rocchio to find the best results in {index}')
             for i in range(nrounds):
-                response = execute_query(query, k, s)
+                response = execute_query(stringify_query(query), k, s)
                 docTFIDF = get_response_tfidf(client, index, response)
-                terms = get_terms(docTFIDF, R)
-                query = new_query(query, terms)
+                terms = get_terms(docTFIDF, R, k, b)
+                query = new_query(query, terms, a)
         else:
             print('No query parameters passed')
     except NotFoundError:
         print(f'Index {index} does not exist')
-    
-    
