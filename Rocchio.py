@@ -146,7 +146,6 @@ def execute_query(query, k, s):
     q = Q('query_string', query=query[0])
     for i in range(1, len(query)):
         q &= Q('query_string', query=query[i])
-    print(q)
     s = s.query(q)
     response = s[0:k].execute()
     return response
@@ -192,7 +191,6 @@ def stringify_query(q):
     query = []
     for key in q:
         query.append(key + '^' + str(q[key]))
-    print(query)
     return query
 
 
@@ -222,13 +220,17 @@ if __name__ == '__main__':
             print(f'Using Rocchio to find the best results in {index}')
             response = []
             for i in range(nrounds):
+                print("---------------------------------------ROUND" + i + "---------------------------------------")
+                print("#####################QUERY#####################")
                 print(query)
+                print("###############################################")
                 response = execute_query(stringify_query(query), k, s)
                 docTFIDF = get_response_tfidf(client, index, response)
                 terms = get_terms(docTFIDF, R, k, b)
                 query = new_query(query, terms, a)
+                print("####################RESPONSE###################")
                 print_response(response)
-            print_response(response)
+                print("###############################################")
         else:
             print('No query parameters passed')
     except NotFoundError:
