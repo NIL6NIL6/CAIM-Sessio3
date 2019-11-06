@@ -147,11 +147,11 @@ def execute_query(query, k, s):
     for i in range(1, len(query)):
         q &= Q('query_string', query=query[i])
     s = s.query(q)
-    response = s.execute()
+    response = s[0:k].execute()
     print("####################RESPONSE###################")
     print_response(response)
     print("###############################################")
-    return response[0:k]
+    return response
 
 
 def get_response_tfidf(client, index, response):
@@ -198,7 +198,7 @@ def stringify_query(q):
 
 
 def print_response(response):
-    print("NUMBER OF DOCUMENTS FOUND:  " + str(len(response)))
+    print("NUMBER OF DOCUMENTS FOUND:  " + str(response.hits.total['value']))
     for r in response:
         print(f'ID= {r.meta.id} SCORE={r.meta.score}')
         print(f'PATH= {r.path}')
