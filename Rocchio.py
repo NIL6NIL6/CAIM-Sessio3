@@ -147,8 +147,11 @@ def execute_query(query, k, s):
     for i in range(1, len(query)):
         q &= Q('query_string', query=query[i])
     s = s.query(q)
-    response = s[0:k].execute()
-    return response
+    response = s.execute()
+    print("####################RESPONSE###################")
+    print_response(response)
+    print("###############################################")
+    return response[0:k]
 
 
 def get_response_tfidf(client, index, response):
@@ -195,6 +198,7 @@ def stringify_query(q):
 
 
 def print_response(response):
+    print("NUMBER OF DOCUMENTS FOUND:  " + str(len(response)))
     for r in response:
         print(f'ID= {r.meta.id} SCORE={r.meta.score}')
         print(f'PATH= {r.path}')
@@ -220,7 +224,7 @@ if __name__ == '__main__':
             print(f'Using Rocchio to find the best results in {index}')
             response = []
             for i in range(nrounds):
-                print("---------------------------------------ROUND" + i + "---------------------------------------")
+                print("---------------------------------------ROUND" + str(i+1) + "---------------------------------------")
                 print("#####################QUERY#####################")
                 print(query)
                 print("###############################################")
@@ -228,9 +232,6 @@ if __name__ == '__main__':
                 docTFIDF = get_response_tfidf(client, index, response)
                 terms = get_terms(docTFIDF, R, k, b)
                 query = new_query(query, terms, a)
-                print("####################RESPONSE###################")
-                print_response(response)
-                print("###############################################")
         else:
             print('No query parameters passed')
     except NotFoundError:
