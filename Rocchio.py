@@ -146,7 +146,7 @@ def execute_query(query, k, s):
     q = Q('query_string', query=query[0])
     for i in range(1, len(query)):
         q &= Q('query_string', query=query[i])
-
+    print(q)
     s = s.query(q)
     response = s[0:k].execute()
     return response
@@ -196,6 +196,14 @@ def stringify_query(q):
     return query
 
 
+def print_response(response):
+    for r in response:
+        print(f'ID= {r.meta.id} SCORE={r.meta.score}')
+        print(f'PATH= {r.path}')
+        print(f'TEXT: {r.text[:50]}')
+        print('-----------------------------------------------------------------')
+
+
 if __name__ == '__main__':
     args = parse_arguments()
 
@@ -212,11 +220,15 @@ if __name__ == '__main__':
         s = Search(using=client, index=index)
         if query is not None:
             print(f'Using Rocchio to find the best results in {index}')
+            response = []
             for i in range(nrounds):
+                print(query)
                 response = execute_query(stringify_query(query), k, s)
                 docTFIDF = get_response_tfidf(client, index, response)
                 terms = get_terms(docTFIDF, R, k, b)
                 query = new_query(query, terms, a)
+                print_response(response)
+            print_response(response)
         else:
             print('No query parameters passed')
     except NotFoundError:
